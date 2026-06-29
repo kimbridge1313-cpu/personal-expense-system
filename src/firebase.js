@@ -29,7 +29,7 @@ if (hasFirebaseConfig) {
   db = getFirestore(app);
 }
 
-export function subscribeTransactions(callback, onError) {
+export function watchTransactions(callback, onError) {
   if (!db) return null;
 
   return onSnapshot(
@@ -46,7 +46,7 @@ export function subscribeTransactions(callback, onError) {
   );
 }
 
-export async function createTransaction(data) {
+export async function addTransaction(data) {
   if (!db) throw new Error("Firebase is not configured.");
 
   return addDoc(collection(db, "transactions"), {
@@ -56,7 +56,7 @@ export async function createTransaction(data) {
   });
 }
 
-export async function updateTransaction(id, data) {
+export async function patchTransaction(id, data) {
   if (!db) throw new Error("Firebase is not configured.");
 
   return updateDoc(doc(db, "transactions", id), {
@@ -65,7 +65,7 @@ export async function updateTransaction(id, data) {
   });
 }
 
-export async function deleteTransaction(id) {
+export async function removeTransaction(id) {
   if (!db) throw new Error("Firebase is not configured.");
 
   return deleteDoc(doc(db, "transactions", id));
