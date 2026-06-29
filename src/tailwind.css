@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply w-full max-w-full overflow-x-hidden;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .app {
+    @apply w-full max-w-[480px] overflow-x-hidden px-3;
+  }
+
+  .field {
+    @apply min-w-0 w-full overflow-hidden;
+  }
+
+  .field label {
+    @apply block w-full min-w-0;
+  }
+
+  .field input,
+  .field select {
+    @apply block w-full max-w-full min-w-0 overflow-hidden rounded-[14px] border border-appLine bg-appSurface text-appText;
+    box-sizing: border-box !important;
+  }
+
+  input[type="date"],
+  input[type="month"] {
+    @apply block w-full max-w-full min-w-0 overflow-hidden text-left;
+    box-sizing: border-box !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    inline-size: 100% !important;
+    min-inline-size: 0 !important;
+    max-inline-size: 100% !important;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="month"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  input[type="date"]::-webkit-datetime-edit,
+  input[type="month"]::-webkit-datetime-edit {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator {
+    margin-left: 2px;
+    padding: 0;
+  }
+
+  .date-row {
+    @apply grid grid-cols-1 gap-3;
+  }
+
+  .filter-row {
+    @apply grid grid-cols-1 gap-3;
+  }
+
+  @media (min-width: 390px) {
+    .filter-row {
+      @apply grid-cols-2;
+    }
+  }
+
+  .summary-strip {
+    @apply grid grid-cols-3 gap-2 overflow-visible;
+  }
+
+  .summary-card {
+    @apply min-w-0 rounded-2xl px-2.5 py-3;
+  }
+
+  .summary-value {
+    font-size: clamp(15px, 4.7vw, 22px) !important;
+  }
+
+  .summary-label,
+  .summary-note {
+    @apply whitespace-nowrap;
+  }
+}
