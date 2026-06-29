@@ -22,6 +22,27 @@ function setStatus(message, type = "info") {
   banner.style.borderColor = type === "success" ? "#d2e3c9" : type === "error" ? "#e5c3bd" : "#eadab5";
   banner.style.color = type === "success" ? "#3f5637" : type === "error" ? "#7d2f2a" : "#73562a";
 }
+function resetManualForm(keepTypeAndCategory = true) {
+  $("manualDate").value = today();
+  if (!keepTypeAndCategory) {
+    $("manualType").value = "expense";
+    refreshOptions();
+    $("manualCategory").value = "餐飲";
+  }
+  $("manualItem").value = "";
+  $("manualAmount").value = "";
+}
+function showCreateSuccess(record) {
+  setStatus(`新增成功：${record.item}｜${money(record.amount)}`, "success");
+  const addAnother = window.confirm("新增成功。\n\n按「確定」再記一筆。\n按「取消」回首頁查看今日明細。");
+  if (addAnother) {
+    resetManualForm(true);
+    openModal();
+    setTimeout(() => $("manualItem")?.focus(), 80);
+  } else {
+    $("todaySection").scrollIntoView({ behavior: "smooth" });
+  }
+}
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -126,10 +147,9 @@ async function createRecord() {
   if (!data.item) return alert("請輸入項目。");
   if (!data.amount || data.amount <= 0) return alert("請輸入金額。");
   await api("/api/transactions", { method: "POST", body: JSON.stringify(data) });
-  $("manualItem").value = "";
-  $("manualAmount").value = "";
   closeModal();
   await loadTransactions();
+  showCreateSuccess(data);
 }
 async function saveRecord(scope, id) {
   const data = { id, date: $(`${scope}-date-${id}`).value, type: $(`${scope}-type-${id}`).value, category: $(`${scope}-category-${id}`).value, item: $(`${scope}-item-${id}`).value.trim(), amount: Number($(`${scope}-amount-${id}`).value) };
@@ -148,7 +168,7 @@ function bind() {
   $("closeManualModalBtn").addEventListener("click", closeModal);
   $("manualModal").addEventListener("click", e => { if (e.target.id === "manualModal") closeModal(); });
   $("createManualBtn").addEventListener("click", () => createRecord().catch(err => alert(err.message)));
-  $("clearManualBtn").addEventListener("click", () => { $("manualDate").value = today(); $("manualType").value = "expense"; refreshOptions(); $("manualCategory").value = "餐飲"; $("manualItem").value = ""; $("manualAmount").value = ""; });
+  $("clearManualBtn").addEventListener("click", () => resetManualForm(false));
   $("resetStatsBtn").addEventListener("click", () => { $("statsMonth").value = month(); $("statsStartDate").value = ""; $("statsEndDate").value = ""; $("statsType").value = "all"; refreshOptions(); $("statsCategory").value = "all"; render(); });
   $("applyStatsBtn").addEventListener("click", render);
   $("manualType").addEventListener("change", refreshOptions);
