@@ -5,6 +5,29 @@ const incomeCategories = ["薪資", "接案收入", "獎金", "投資", "其他�
 let transactions = [];
 let editing = null;
 
+function injectMobileFitStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+    .app { width: 100%; max-width: 480px; overflow-x: hidden; }
+    .hero, .panel, details.query-details, .modal, .bottom-nav { max-width: 100%; }
+    .summary-strip { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; overflow-x: visible !important; gap: 8px !important; }
+    .summary-card { min-width: 0 !important; padding: 12px 9px !important; }
+    .summary-value { font-size: clamp(16px, 5vw, 22px) !important; word-break: keep-all; }
+    .summary-label, .summary-note { white-space: nowrap; }
+    .entry-top, .section-head, .hero-row { min-width: 0; }
+    .entry-amount { max-width: 42%; font-size: clamp(14px, 4.2vw, 17px); }
+    .filter-row, .date-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    @media (max-width: 360px) {
+      .app { padding-left: 10px; padding-right: 10px; }
+      .summary-strip { gap: 6px !important; }
+      .summary-card { padding: 10px 7px !important; border-radius: 16px !important; }
+      .summary-note { display: none; }
+      .button { padding-left: 10px; padding-right: 10px; }
+    }
+  `;
+  document.head.appendChild(style);
+}
 function today(offset = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -32,16 +55,51 @@ function resetManualForm(keepTypeAndCategory = true) {
   $("manualItem").value = "";
   $("manualAmount").value = "";
 }
-function showCreateSuccess(record) {
-  setStatus(`新增成功：${record.item}｜${money(record.amount)}`, "success");
-  const addAnother = window.confirm("新增成功。\n\n按「確定」再記一筆。\n按「取消」回首頁查看今日明細。");
-  if (addAnother) {
+function ensureSuccessDialog() {
+  let dialog = $("successDialog");
+  if (dialog) return dialog;
+
+  dialog = document.createElement("div");
+  dialog.id = "successDialog";
+  dialog.className = "modal-backdrop";
+  dialog.innerHTML = `
+    <div class="modal" style="border-radius:26px 26px 0 0;">
+      <div class="modal-handle"></div>
+      <div class="modal-body" style="text-align:center;padding-top:28px;">
+        <div style="width:54px;height:54px;margin:0 auto 14px;border-radius:999px;background:#e8efe3;display:grid;place-items:center;color:#3f5637;font-size:28px;font-weight:950;">✓</div>
+        <h2 class="modal-title" style="font-size:22px;">記帳成功</h2>
+        <p class="section-subtitle" id="successMessage" style="margin-top:8px;">這筆收支已寫入資料庫。</p>
+      </div>
+      <div class="modal-footer" style="grid-template-columns:1fr 1fr;">
+        <button class="button secondary" id="successContinueBtn">繼續記帳</button>
+        <button class="button primary" id="successDoneBtn">結束</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  $("successContinueBtn").addEventListener("click", () => {
+    dialog.classList.remove("open");
     resetManualForm(true);
     openModal();
     setTimeout(() => $("manualItem")?.focus(), 80);
-  } else {
+  });
+  $("successDoneBtn").addEventListener("click", () => {
+    dialog.classList.remove("open");
     $("todaySection").scrollIntoView({ behavior: "smooth" });
-  }
+  });
+  dialog.addEventListener("click", e => {
+    if (e.target.id === "successDialog") {
+      dialog.classList.remove("open");
+      $("todaySection").scrollIntoView({ behavior: "smooth" });
+    }
+  });
+  return dialog;
+}
+function showCreateSuccess(record) {
+  setStatus(`新增成功：${record.item}｜${money(record.amount)}`, "success");
+  const dialog = ensureSuccessDialog();
+  $("successMessage").textContent = `${record.item}｜${money(record.amount)}`;
+  dialog.classList.add("open");
 }
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -185,6 +243,7 @@ function bind() {
   });
 }
 async function init() {
+  injectMobileFitStyles();
   $("manualDate").value = today();
   $("statsMonth").value = month();
   refreshOptions();
