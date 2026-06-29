@@ -1,4 +1,5 @@
-import admin from "firebase-admin";
+import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 function cleanEnv(value) {
   return String(value || "").trim().replace(/^['"]|['"]$/g, "");
@@ -35,11 +36,11 @@ function getFirebaseAdminConfig() {
 }
 
 export function getAdminDb() {
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     const { projectId, clientEmail, privateKey } = getFirebaseAdminConfig();
 
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    initializeApp({
+      credential: cert({
         projectId,
         clientEmail,
         privateKey
@@ -47,7 +48,11 @@ export function getAdminDb() {
     });
   }
 
-  return admin.firestore();
+  return getFirestore();
 }
 
-export { admin };
+export const admin = {
+  firestore: {
+    FieldValue
+  }
+};
