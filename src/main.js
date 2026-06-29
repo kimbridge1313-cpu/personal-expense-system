@@ -18,6 +18,54 @@ function injectMobileFitStyles() {
     .entry-top, .section-head, .hero-row { min-width: 0; }
     .entry-amount { max-width: 42%; font-size: clamp(14px, 4.2vw, 17px); }
     .filter-row, .date-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+    .native-date-shell {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 45px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fffdf8;
+      color: var(--text);
+      padding: 11px 12px;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+    .native-date-shell::after {
+      content: "⌄";
+      color: var(--muted);
+      font-size: 13px;
+      flex: 0 0 auto;
+      margin-left: 8px;
+    }
+    .native-date-display {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.2;
+    }
+    .native-date-input {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      opacity: 0 !important;
+      appearance: auto !important;
+      -webkit-appearance: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      cursor: pointer;
+    }
+
     @media (max-width: 360px) {
       .app { padding-left: 10px; padding-right: 10px; }
       .summary-strip { gap: 6px !important; }
@@ -38,6 +86,30 @@ function money(value) { return Number(value || 0).toLocaleString() + " 元"; }
 function safe(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
+function formatDateDisplay(value, type) {
+  if (!value) return type === "month" ? "選擇月份" : "選擇日期";
+  return value;
+}
+function upgradeNativeDateInputs(root = document) {
+  root.querySelectorAll('input[type="date"], input[type="month"]').forEach(input => {
+    if (input.dataset.nativeWrapped === "1") return;
+    const type = input.type;
+    const shell = document.createElement("div");
+    shell.className = "native-date-shell";
+    const display = document.createElement("div");
+    display.className = "native-date-display";
+    display.textContent = formatDateDisplay(input.value, type);
+
+    input.dataset.nativeWrapped = "1";
+    input.classList.add("native-date-input");
+    input.parentNode.insertBefore(shell, input);
+    shell.appendChild(display);
+    shell.appendChild(input);
+
+    input.addEventListener("input", () => { display.textContent = formatDateDisplay(input.value, type); });
+    input.addEventListener("change", () => { display.textContent = formatDateDisplay(input.value, type); });
+  });
+}
 function setStatus(message, type = "info") {
   const banner = $("statusBanner");
   banner.textContent = message;
@@ -47,6 +119,7 @@ function setStatus(message, type = "info") {
 }
 function resetManualForm(keepTypeAndCategory = true) {
   $("manualDate").value = today();
+  $("manualDate").dispatchEvent(new Event("change", { bubbles: true }));
   if (!keepTypeAndCategory) {
     $("manualType").value = "expense";
     refreshOptions();
@@ -168,6 +241,7 @@ function render() {
   renderBars(rows);
   renderList("todayList", transactions.filter(t => t.date === today()), "today");
   renderList("detailList", rows.slice().sort((a, b) => b.date.localeCompare(a.date)), "detail");
+  upgradeNativeDateInputs(document);
 }
 function renderBars(rows) {
   const totals = {};
@@ -227,7 +301,7 @@ function bind() {
   $("manualModal").addEventListener("click", e => { if (e.target.id === "manualModal") closeModal(); });
   $("createManualBtn").addEventListener("click", () => createRecord().catch(err => alert(err.message)));
   $("clearManualBtn").addEventListener("click", () => resetManualForm(false));
-  $("resetStatsBtn").addEventListener("click", () => { $("statsMonth").value = month(); $("statsStartDate").value = ""; $("statsEndDate").value = ""; $("statsType").value = "all"; refreshOptions(); $("statsCategory").value = "all"; render(); });
+  $("resetStatsBtn").addEventListener("click", () => { $("statsMonth").value = month(); $("statsMonth").dispatchEvent(new Event("change", { bubbles: true })); $("statsStartDate").value = ""; $("statsStartDate").dispatchEvent(new Event("change", { bubbles: true })); $("statsEndDate").value = ""; $("statsEndDate").dispatchEvent(new Event("change", { bubbles: true })); $("statsType").value = "all"; refreshOptions(); $("statsCategory").value = "all"; render(); });
   $("applyStatsBtn").addEventListener("click", render);
   $("manualType").addEventListener("change", refreshOptions);
   $("statsType").addEventListener("change", () => { refreshOptions(); render(); });
@@ -246,6 +320,7 @@ async function init() {
   injectMobileFitStyles();
   $("manualDate").value = today();
   $("statsMonth").value = month();
+  upgradeNativeDateInputs(document);
   refreshOptions();
   $("manualCategory").value = "餐飲";
   $("statsCategory").value = "all";
