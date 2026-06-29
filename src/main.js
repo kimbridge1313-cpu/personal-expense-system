@@ -28,7 +28,7 @@ async function api(path, options = {}) {
     ...options
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "API request failed");
+  if (!response.ok) throw new Error(data.error || data.message || "API request failed");
   return data;
 }
 async function loadTransactions() {
@@ -176,7 +176,7 @@ async function init() {
     await loadTransactions();
   } catch (error) {
     console.error(error);
-    setStatus("API 連線失敗，請檢查 FIREBASE_PROJECT_ID、FIREBASE_CLIENT_EMAIL、FIREBASE_PRIVATE_KEY。", "error");
+    setStatus(`API 連線失敗：${error.message}`, "error");
     render();
   }
 }
