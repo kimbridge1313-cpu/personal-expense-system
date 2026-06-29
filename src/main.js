@@ -1,15 +1,8 @@
-import { hasFirebaseConfig, watchTransactions, addTransaction, patchTransaction, removeTransaction } from "./firebase.js";
-
 const $ = (id) => document.getElementById(id);
 const expenseCategories = ["餐飲", "交通", "購物", "生活", "娛樂", "學習", "固定支出", "醫療照護", "其他支出"];
 const incomeCategories = ["薪資", "接案收入", "獎金", "投資", "其他收入"];
 
-let transactions = [
-  { id: crypto.randomUUID(), type: "expense", date: today(), amount: 120, category: "餐飲", item: "午餐", source: "demo" },
-  { id: crypto.randomUUID(), type: "expense", date: today(), amount: 35, category: "交通", item: "捷運", source: "demo" },
-  { id: crypto.randomUUID(), type: "income", date: today(), amount: 8000, category: "接案收入", item: "設計案尾款", source: "demo" },
-  { id: crypto.randomUUID(), type: "expense", date: today(), amount: 2000, category: "醫療照護", item: "看護費", source: "demo" }
-];
+let transactions = [];
 let editing = null;
 
 function today(offset = 0) {
@@ -21,6 +14,28 @@ function month() { return today().slice(0, 7); }
 function money(value) { return Number(value || 0).toLocaleString() + " 元"; }
 function safe(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+function setStatus(message, type = "info") {
+  const banner = $("statusBanner");
+  banner.textContent = message;
+  banner.style.background = type === "success" ? "#e8efe3" : type === "error" ? "#f5e3dd" : "#fff8e8";
+  banner.style.borderColor = type === "success" ? "#d2e3c9" : type === "error" ? "#e5c3bd" : "#eadab5";
+  banner.style.color = type === "success" ? "#3f5637" : type === "error" ? "#7d2f2a" : "#73562a";
+}
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "API request failed");
+  return data;
+}
+async function loadTransactions() {
+  const data = await api("/api/transactions");
+  transactions = Array.isArray(data.rows) ? data.rows : [];
+  refreshOptions();
+  render();
 }
 function categories(type) {
   if (type === "income") return [...new Set([...incomeCategories, ...transactions.filter(t => t.type === "income").map(t => t.category)])];
@@ -77,7 +92,10 @@ function render() {
 }
 function renderBars(rows) {
   const totals = {};
-  rows.forEach(t => totals[`${t.type === "income" ? "收入" : "支出"}｜${t.category}`] = (totals[`${t.type === "income" ? "收入" : "支出"}｜${t.category}`] || 0) + Number(t.amount || 0));
+  rows.forEach(t => {
+    const key = `${t.type === "income" ? "收入" : "支出"}｜${t.category}`;
+    totals[key] = (totals[key] || 0) + Number(t.amount || 0);
+  });
   const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
   $("categoryBars").innerHTML = entries.length ? "" : '<div class="empty">目前篩選範圍沒有資料。</div>';
   const max = Math.max(...entries.map(([, v]) => v), 1);
@@ -107,24 +125,29 @@ async function createRecord() {
   const data = { date: $("manualDate").value || today(), type: $("manualType").value, category: $("manualCategory").value, item: $("manualItem").value.trim(), amount: Number($("manualAmount").value), source: "web" };
   if (!data.item) return alert("請輸入項目。");
   if (!data.amount || data.amount <= 0) return alert("請輸入金額。");
-  if (hasFirebaseConfig) await addTransaction(data); else { transactions.unshift({ id: crypto.randomUUID(), ...data }); render(); }
-  $("manualItem").value = ""; $("manualAmount").value = ""; closeModal();
+  await api("/api/transactions", { method: "POST", body: JSON.stringify(data) });
+  $("manualItem").value = "";
+  $("manualAmount").value = "";
+  closeModal();
+  await loadTransactions();
 }
 async function saveRecord(scope, id) {
-  const data = { date: $(`${scope}-date-${id}`).value, type: $(`${scope}-type-${id}`).value, category: $(`${scope}-category-${id}`).value, item: $(`${scope}-item-${id}`).value.trim(), amount: Number($(`${scope}-amount-${id}`).value) };
+  const data = { id, date: $(`${scope}-date-${id}`).value, type: $(`${scope}-type-${id}`).value, category: $(`${scope}-category-${id}`).value, item: $(`${scope}-item-${id}`).value.trim(), amount: Number($(`${scope}-amount-${id}`).value) };
   if (!data.item) return alert("項目不可空白。");
   if (!data.amount || data.amount <= 0) return alert("金額需大於 0。");
-  if (hasFirebaseConfig) await patchTransaction(id, data); else { transactions = transactions.map(t => t.id === id ? { ...t, ...data } : t); render(); }
+  await api("/api/transactions", { method: "PUT", body: JSON.stringify(data) });
   editing = null;
+  await loadTransactions();
 }
 async function deleteRecord(id) {
-  if (hasFirebaseConfig) await removeTransaction(id); else { transactions = transactions.filter(t => t.id !== id); render(); }
+  await api(`/api/transactions?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  await loadTransactions();
 }
 function bind() {
   ["openManualModalBtn", "openManualModalBtn2", "bottomAddBtn"].forEach(id => $(id).addEventListener("click", openModal));
   $("closeManualModalBtn").addEventListener("click", closeModal);
   $("manualModal").addEventListener("click", e => { if (e.target.id === "manualModal") closeModal(); });
-  $("createManualBtn").addEventListener("click", createRecord);
+  $("createManualBtn").addEventListener("click", () => createRecord().catch(err => alert(err.message)));
   $("clearManualBtn").addEventListener("click", () => { $("manualDate").value = today(); $("manualType").value = "expense"; refreshOptions(); $("manualCategory").value = "餐飲"; $("manualItem").value = ""; $("manualAmount").value = ""; });
   $("resetStatsBtn").addEventListener("click", () => { $("statsMonth").value = month(); $("statsStartDate").value = ""; $("statsEndDate").value = ""; $("statsType").value = "all"; refreshOptions(); $("statsCategory").value = "all"; render(); });
   $("applyStatsBtn").addEventListener("click", render);
@@ -136,24 +159,24 @@ function bind() {
   document.body.addEventListener("click", e => {
     const edit = e.target.closest(".js-edit"), del = e.target.closest(".js-delete"), save = e.target.closest(".js-save"), cancel = e.target.closest(".js-cancel");
     if (edit) { editing = `${edit.dataset.scope}:${edit.dataset.id}`; render(); }
-    if (del) deleteRecord(del.dataset.id);
-    if (save) saveRecord(save.dataset.scope, save.dataset.id);
+    if (del) deleteRecord(del.dataset.id).catch(err => alert(err.message));
+    if (save) saveRecord(save.dataset.scope, save.dataset.id).catch(err => alert(err.message));
     if (cancel) { editing = null; render(); }
   });
 }
-function init() {
+async function init() {
   $("manualDate").value = today();
   $("statsMonth").value = month();
   refreshOptions();
   $("manualCategory").value = "餐飲";
   $("statsCategory").value = "all";
   bind();
-  if (hasFirebaseConfig) {
-    $("statusBanner").textContent = "Firebase 已啟用：資料會讀寫 Firestore。";
-    $("statusBanner").style.background = "#e8efe3";
-    watchTransactions(rows => { transactions = rows; refreshOptions(); render(); }, error => { console.error(error); $("statusBanner").textContent = "Firebase 連線失敗，請檢查 Vercel 環境變數與 Firestore 規則。"; });
-  } else {
-    $("statusBanner").textContent = "目前是 Demo 模式：尚未在 Vercel 填入 Firebase 環境變數，資料不會永久保存。";
+  setStatus("正式模式：前端透過 Vercel API 讀寫 Firestore。", "success");
+  try {
+    await loadTransactions();
+  } catch (error) {
+    console.error(error);
+    setStatus("API 連線失敗，請檢查 FIREBASE_PROJECT_ID、FIREBASE_CLIENT_EMAIL、FIREBASE_PRIVATE_KEY。", "error");
     render();
   }
 }
