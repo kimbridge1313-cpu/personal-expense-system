@@ -13,6 +13,9 @@
     "firebase-admin": "latest"
   },
   "devDependencies": {
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest",
     "vite": "latest"
   }
 }
