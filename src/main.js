@@ -18,6 +18,7 @@ const categoryKeywords = [
 let transactions = [];
 let editing = null;
 let pendingChatRecord = null;
+let pendingVoiceRecord = null;
 let deferredInstallPrompt = null;
 let recognition = null;
 let isListening = false;
@@ -308,6 +309,16 @@ function parseChatText(text) {
   };
 }
 
+function previewRowsHtml(record) {
+  const typeLabel = record.type === "income" ? "收入" : "支出";
+  return `
+    <div class="preview-row"><span>類型</span><strong>${safe(typeLabel)}</strong></div>
+    <div class="preview-row"><span>日期</span><strong>${safe(record.date)}</strong></div>
+    <div class="preview-row"><span>分類</span><strong>${safe(record.category)}</strong></div>
+    <div class="preview-row"><span>項目</span><strong>${safe(record.item)}</strong></div>
+    <div class="preview-row"><span>金額</span><strong>${money(record.amount)}</strong></div>`;
+}
+
 function setConfirmButtonState() {
   const confirm = $("chatConfirmBtn");
   const clear = $("chatClearBtn");
@@ -319,13 +330,7 @@ function setConfirmButtonState() {
 }
 
 function previewRecord(record) {
-  const typeLabel = record.type === "income" ? "收入" : "支出";
-  $("chatPreviewBody").innerHTML = `
-    <div class="preview-row"><span>類型</span><strong>${safe(typeLabel)}</strong></div>
-    <div class="preview-row"><span>日期</span><strong>${safe(record.date)}</strong></div>
-    <div class="preview-row"><span>分類</span><strong>${safe(record.category)}</strong></div>
-    <div class="preview-row"><span>項目</span><strong>${safe(record.item)}</strong></div>
-    <div class="preview-row"><span>金額</span><strong>${money(record.amount)}</strong></div>`;
+  $("chatPreviewBody").innerHTML = previewRowsHtml(record);
   setConfirmButtonState();
   $("chatPreview").classList.add("open");
 }
@@ -363,12 +368,14 @@ async function createRecordFromData(data, options = {}) {
     }
     setStatus(`新增成功：${data.item}｜${money(data.amount)}`, "success");
     if (clearAfter) clearChat();
+    return true;
   } catch (error) {
     transactions = transactions.filter(item => item.id !== localId);
     render();
     setConfirmButtonState();
     setStatus(`新增失敗：${error.message}`, "error");
     alert(`新增失敗：${error.message}`);
+    return false;
   }
 }
 
@@ -379,19 +386,22 @@ async function confirmChatRecord() {
 
 function handleVoiceTranscript(text) {
   const normalized = String(text || "").trim();
-  if (!normalized) return;
+  if (!normalized) {
+    renderVoiceError("沒有聽到內容，請再試一次。");
+    return;
+  }
 
   const record = parseChatText(normalized);
   record.source = "web-voice";
 
   if (!record.amount || record.amount <= 0) {
-    setStatus("語音沒有抓到金額，請再說一次，例如「今天午餐 120」。", "error");
+    renderVoiceError("語音沒有抓到金額，請再說一次，例如「今天午餐 120」。");
     return;
   }
 
-  pendingChatRecord = record;
-  previewRecord(record);
-  setStatus("語音已解析，請確認後儲存。", "info");
+  pendingVoiceRecord = record;
+  renderVoiceConfirm(record);
+  setStatus("語音已解析，請在彈窗內確認儲存。", "info");
 }
 
 function openModal() {
@@ -402,37 +412,127 @@ function closeModal() {
   $("manualModal").classList.remove("open");
 }
 
-function ensureListeningDialog() {
-  let dialog = $("listeningDialog");
+function ensureVoiceDialog() {
+  let dialog = $("voiceDialog");
   if (dialog) return dialog;
 
   dialog = document.createElement("div");
-  dialog.id = "listeningDialog";
+  dialog.id = "voiceDialog";
   dialog.className = "modal-backdrop";
   dialog.innerHTML = `
     <div class="modal" style="border-radius:26px 26px 0 0;">
       <div class="modal-handle"></div>
-      <div class="listening-modal">
-        <div class="listening-dot">⌁</div>
-        <h2 class="modal-title" style="font-size:22px;">聽取中</h2>
-        <p class="section-subtitle" style="margin-top:8px;">請說出記帳內容，例如「今天午餐 120」。</p>
-        <button class="button secondary" id="stopListeningBtn" style="margin-top:16px;width:100%;">完成聽取</button>
-      </div>
+      <div id="voiceDialogBody"></div>
     </div>`;
 
   document.body.appendChild(dialog);
-  $("stopListeningBtn").addEventListener("click", () => {
-    if (recognition && isListening) recognition.stop();
-  });
   return dialog;
 }
 
-function showListeningDialog() {
-  ensureListeningDialog().classList.add("open");
+function showVoiceDialog() {
+  ensureVoiceDialog().classList.add("open");
 }
 
-function hideListeningDialog() {
-  $("listeningDialog")?.classList.remove("open");
+function closeVoiceDialog() {
+  $("voiceDialog")?.classList.remove("open");
+  pendingVoiceRecord = null;
+}
+
+function renderVoiceListening() {
+  ensureVoiceDialog();
+  $("voiceDialogBody").innerHTML = `
+    <div class="listening-modal">
+      <div class="listening-dot">⌁</div>
+      <h2 class="modal-title" style="font-size:22px;">聽取中</h2>
+      <p class="section-subtitle" style="margin-top:8px;">請說出記帳內容，例如「今天午餐 120」。</p>
+      <button class="button secondary" id="stopListeningBtn" style="margin-top:16px;width:100%;">完成聽取</button>
+    </div>`;
+  $("stopListeningBtn").addEventListener("click", () => {
+    if (recognition && isListening) recognition.stop();
+  });
+}
+
+function renderVoiceConfirm(record) {
+  ensureVoiceDialog();
+  $("voiceDialogBody").innerHTML = `
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:14px;">
+        <h2 class="modal-title" style="font-size:22px;">確認這筆記帳</h2>
+        <p class="section-subtitle" style="margin-top:8px;">確認解析結果正確後再儲存。</p>
+      </div>
+      <div class="chat-preview open"><div class="preview-grid">${previewRowsHtml(record)}</div></div>
+    </div>
+    <div class="modal-footer" style="grid-template-columns:1fr 1fr;">
+      <button class="button secondary" id="voiceRetryBtn">重新聽取</button>
+      <button class="button primary" id="voiceConfirmBtn">確認儲存</button>
+    </div>`;
+
+  $("voiceRetryBtn").addEventListener("click", () => {
+    pendingVoiceRecord = null;
+    if (recognition && !isListening) recognition.start();
+  });
+  $("voiceConfirmBtn").addEventListener("click", confirmVoiceRecord);
+}
+
+function renderVoiceSaving() {
+  ensureVoiceDialog();
+  $("voiceDialogBody").innerHTML = `
+    <div class="listening-modal">
+      <div class="listening-dot">✓</div>
+      <h2 class="modal-title" style="font-size:22px;">儲存中</h2>
+      <p class="section-subtitle" style="margin-top:8px;">正在寫入記帳資料。</p>
+    </div>`;
+}
+
+function renderVoiceSuccess(record) {
+  ensureVoiceDialog();
+  $("voiceDialogBody").innerHTML = `
+    <div class="modal-body" style="text-align:center;padding-top:28px;">
+      <div style="width:54px;height:54px;margin:0 auto 14px;border-radius:999px;background:#e8efe3;display:grid;place-items:center;color:#3f5637;font-size:28px;font-weight:950;">✓</div>
+      <h2 class="modal-title" style="font-size:22px;">記帳成功</h2>
+      <p class="section-subtitle" style="margin-top:8px;">${safe(record.item)}｜${money(record.amount)}</p>
+    </div>
+    <div class="modal-footer" style="grid-template-columns:1fr 1fr;">
+      <button class="button secondary" id="voiceContinueBtn">繼續記帳</button>
+      <button class="button primary" id="voiceDoneBtn">結束</button>
+    </div>`;
+  $("voiceContinueBtn").addEventListener("click", () => {
+    pendingVoiceRecord = null;
+    if (recognition && !isListening) recognition.start();
+  });
+  $("voiceDoneBtn").addEventListener("click", () => {
+    closeVoiceDialog();
+    $("todaySection").scrollIntoView({ behavior: "smooth" });
+  });
+}
+
+function renderVoiceError(message) {
+  ensureVoiceDialog();
+  $("voiceDialogBody").innerHTML = `
+    <div class="modal-body" style="text-align:center;padding-top:28px;">
+      <div style="width:54px;height:54px;margin:0 auto 14px;border-radius:999px;background:#f5e3dd;display:grid;place-items:center;color:#7d2f2a;font-size:28px;font-weight:950;">!</div>
+      <h2 class="modal-title" style="font-size:22px;">無法解析</h2>
+      <p class="section-subtitle" style="margin-top:8px;">${safe(message)}</p>
+    </div>
+    <div class="modal-footer" style="grid-template-columns:1fr 1fr;">
+      <button class="button secondary" id="voiceCancelBtn">取消</button>
+      <button class="button primary" id="voiceTryAgainBtn">重新聽取</button>
+    </div>`;
+  $("voiceCancelBtn").addEventListener("click", closeVoiceDialog);
+  $("voiceTryAgainBtn").addEventListener("click", () => {
+    if (recognition && !isListening) recognition.start();
+  });
+}
+
+async function confirmVoiceRecord() {
+  if (!pendingVoiceRecord) return;
+  const record = pendingVoiceRecord;
+  renderVoiceSaving();
+  const ok = await createRecordFromData(record, { showDialog: false, clearAfter: false });
+  if (ok) {
+    pendingVoiceRecord = null;
+    renderVoiceSuccess(record);
+  }
 }
 
 function ensureSuccessDialog() {
@@ -568,7 +668,8 @@ function setupVoiceInput() {
     voiceTranscript = "";
     voiceBtn.textContent = "🎙️ 正在聽...";
     voiceBtn.classList.add("voice-active");
-    showListeningDialog();
+    renderVoiceListening();
+    showVoiceDialog();
     setStatus("正在聽你說記帳內容。", "info");
   };
 
@@ -577,7 +678,10 @@ function setupVoiceInput() {
   };
 
   recognition.onerror = (event) => {
-    hideListeningDialog();
+    isListening = false;
+    voiceBtn.textContent = "🎙️ 語音輸入";
+    voiceBtn.classList.remove("voice-active");
+    renderVoiceError(`語音輸入失敗：${event.error}`);
     setStatus(`語音輸入失敗：${event.error}`, "error");
   };
 
@@ -585,7 +689,6 @@ function setupVoiceInput() {
     isListening = false;
     voiceBtn.textContent = "🎙️ 語音輸入";
     voiceBtn.classList.remove("voice-active");
-    hideListeningDialog();
     handleVoiceTranscript(voiceTranscript);
   };
 
