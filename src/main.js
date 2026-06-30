@@ -21,6 +21,8 @@ let pendingChatRecord = null;
 let deferredInstallPrompt = null;
 let recognition = null;
 let isListening = false;
+let voiceTranscript = "";
+let voiceAutoSaveTimer = null;
 
 function today(offset = 0) {
   const d = new Date();
@@ -307,7 +309,26 @@ function parseChatText(text) {
   };
 }
 
-function previewRecord(record) {
+function setConfirmButtonState(mode = "chat") {
+  const confirm = $("chatConfirmBtn");
+  const clear = $("chatClearBtn");
+  if (!confirm || !clear) return;
+
+  if (mode === "voice") {
+    confirm.disabled = true;
+    clear.disabled = true;
+    confirm.textContent = "自動儲存中";
+    clear.textContent = "語音解析";
+    return;
+  }
+
+  confirm.disabled = false;
+  clear.disabled = false;
+  confirm.textContent = "確認儲存";
+  clear.textContent = "清空";
+}
+
+function previewRecord(record, mode = "chat") {
   const typeLabel = record.type === "income" ? "收入" : "支出";
   $("chatPreviewBody").innerHTML = `
     <div class="preview-row"><span>類型</span><strong>${safe(typeLabel)}</strong></div>
@@ -315,6 +336,7 @@ function previewRecord(record) {
     <div class="preview-row"><span>分類</span><strong>${safe(record.category)}</strong></div>
     <div class="preview-row"><span>項目</span><strong>${safe(record.item)}</strong></div>
     <div class="preview-row"><span>金額</span><strong>${money(record.amount)}</strong></div>`;
+  setConfirmButtonState(mode);
   $("chatPreview").classList.add("open");
 }
 
@@ -324,7 +346,7 @@ function parseChatInput() {
   const record = parseChatText(text);
   if (!record.amount || record.amount <= 0) return alert("沒有抓到金額，請用例如「今天午餐 120」。");
   pendingChatRecord = record;
-  previewRecord(record);
+  previewRecord(record, "chat");
   setStatus("已解析，確認後會寫入資料庫。", "info");
 }
 
@@ -332,10 +354,11 @@ function clearChat() {
   pendingChatRecord = null;
   $("chatInput").value = "";
   $("chatPreview").classList.remove("open");
+  setConfirmButtonState("chat");
 }
 
 async function createRecordFromData(data, options = {}) {
-  const { showDialog = true, clearAfter = false } = options;
+  const { showDialog = true, clearAfter = false, clearPreview = false } = options;
   const localId = tempId();
   const optimisticRecord = { id: localId, ...data };
   transactions = [optimisticRecord, ...transactions];
@@ -350,9 +373,15 @@ async function createRecordFromData(data, options = {}) {
     }
     setStatus(`新增成功：${data.item}｜${money(data.amount)}`, "success");
     if (clearAfter) clearChat();
+    if (clearPreview) {
+      pendingChatRecord = null;
+      $("chatPreview").classList.remove("open");
+      setConfirmButtonState("chat");
+    }
   } catch (error) {
     transactions = transactions.filter(item => item.id !== localId);
     render();
+    setConfirmButtonState("chat");
     setStatus(`新增失敗：${error.message}`, "error");
     alert(`新增失敗：${error.message}`);
   }
@@ -361,6 +390,28 @@ async function createRecordFromData(data, options = {}) {
 async function confirmChatRecord() {
   if (!pendingChatRecord) return parseChatInput();
   await createRecordFromData(pendingChatRecord, { showDialog: true, clearAfter: true });
+}
+
+function handleVoiceTranscript(text) {
+  const normalized = String(text || "").trim();
+  if (!normalized) return;
+
+  const record = parseChatText(normalized);
+  record.source = "web-voice";
+
+  if (!record.amount || record.amount <= 0) {
+    setStatus("語音沒有抓到金額，請再說一次，例如「今天午餐 120」。", "error");
+    return;
+  }
+
+  pendingChatRecord = record;
+  previewRecord(record, "voice");
+  setStatus("語音已解析，正在自動儲存。", "info");
+
+  window.clearTimeout(voiceAutoSaveTimer);
+  voiceAutoSaveTimer = window.setTimeout(() => {
+    createRecordFromData(record, { showDialog: true, clearPreview: true }).catch(err => alert(err.message));
+  }, 650);
 }
 
 function openModal() {
@@ -501,14 +552,15 @@ function setupVoiceInput() {
 
   recognition.onstart = () => {
     isListening = true;
+    voiceTranscript = "";
+    window.clearTimeout(voiceAutoSaveTimer);
     voiceBtn.textContent = "🎙️ 正在聽...";
     voiceBtn.classList.add("voice-active");
     setStatus("正在聽你說記帳內容。", "info");
   };
 
   recognition.onresult = (event) => {
-    const text = Array.from(event.results).map(result => result[0].transcript).join("");
-    $("chatInput").value = text;
+    voiceTranscript = Array.from(event.results).map(result => result[0].transcript).join("");
   };
 
   recognition.onerror = (event) => {
@@ -519,7 +571,7 @@ function setupVoiceInput() {
     isListening = false;
     voiceBtn.textContent = "🎙️ 語音輸入";
     voiceBtn.classList.remove("voice-active");
-    if ($("chatInput").value.trim()) parseChatInput();
+    handleVoiceTranscript(voiceTranscript);
   };
 
   voiceBtn.addEventListener("click", () => {
