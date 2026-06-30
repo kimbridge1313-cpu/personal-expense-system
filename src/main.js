@@ -444,12 +444,8 @@ function renderVoiceListening() {
     <div class="listening-modal">
       <div class="listening-dot">⌁</div>
       <h2 class="modal-title" style="font-size:22px;">聽取中</h2>
-      <p class="section-subtitle" style="margin-top:8px;">請說出記帳內容，例如「今天午餐 120」。</p>
-      <button class="button secondary" id="stopListeningBtn" style="margin-top:16px;width:100%;">完成聽取</button>
+      <p class="section-subtitle" style="margin-top:8px;">請說出記帳內容，例如「今天午餐 120」。系統會自動辨識。</p>
     </div>`;
-  $("stopListeningBtn").addEventListener("click", () => {
-    if (recognition && isListening) recognition.stop();
-  });
 }
 
 function renderVoiceConfirm(record) {
@@ -693,10 +689,7 @@ function setupVoiceInput() {
   };
 
   voiceBtn.addEventListener("click", () => {
-    if (isListening) {
-      recognition.stop();
-      return;
-    }
+    if (isListening) return;
     recognition.start();
   });
 }
@@ -724,7 +717,6 @@ function setupPwa() {
     deferredInstallPrompt.prompt();
     await deferredInstallPrompt.userChoice;
     deferredInstallPrompt = null;
-    $("installPwaBtn").style.display = "none";
   });
 }
 
@@ -761,8 +753,6 @@ function bind() {
   $("manualType").addEventListener("change", refreshOptions);
   $("statsType").addEventListener("change", () => { refreshOptions(); render(); });
   ["statsMonth", "statsStartDate", "statsEndDate", "statsCategory"].forEach(id => $(id).addEventListener("change", render));
-  $("jumpTodayBtn").addEventListener("click", () => $("todaySection").scrollIntoView({ behavior: "smooth" }));
-  $("jumpStatsBtn").addEventListener("click", () => { $("queryDetails").open = true; $("queryDetails").scrollIntoView({ behavior: "smooth" }); });
 
   document.body.addEventListener("click", e => {
     const edit = e.target.closest(".js-edit");
