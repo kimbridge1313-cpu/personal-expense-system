@@ -1,0 +1,20 @@
+{
+  "name": "個人記帳系統",
+  "short_name": "個人記帳",
+  "description": "對話記帳、語音輸入與手機版個人收支管理。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f3ec",
+  "theme_color": "#2f342b",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
