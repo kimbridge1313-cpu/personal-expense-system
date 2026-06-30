@@ -501,7 +501,7 @@ function setupVoiceInput() {
 
   recognition.onstart = () => {
     isListening = true;
-    voiceBtn.textContent = "正在聽...";
+    voiceBtn.textContent = "🎙️ 正在聽...";
     voiceBtn.classList.add("voice-active");
     setStatus("正在聽你說記帳內容。", "info");
   };
@@ -517,7 +517,7 @@ function setupVoiceInput() {
 
   recognition.onend = () => {
     isListening = false;
-    voiceBtn.textContent = "語音輸入";
+    voiceBtn.textContent = "🎙️ 語音輸入";
     voiceBtn.classList.remove("voice-active");
     if ($("chatInput").value.trim()) parseChatInput();
   };
