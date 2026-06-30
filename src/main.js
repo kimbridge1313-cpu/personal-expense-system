@@ -31,6 +31,10 @@ function safe(value) {
     .replaceAll("'", "&#039;");
 }
 
+function tempId() {
+  return `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function setStatus(message, type = "info") {
   const banner = $("statusBanner");
   banner.textContent = message;
@@ -49,11 +53,13 @@ async function api(path, options = {}) {
   return data;
 }
 
-async function loadTransactions() {
+async function loadTransactions(options = {}) {
+  const { quiet = false } = options;
   const data = await api("/api/transactions");
   transactions = Array.isArray(data.rows) ? data.rows : [];
   refreshOptions();
   render();
+  if (!quiet) setStatus("資料已同步。", "success");
 }
 
 function categories(type) {
@@ -265,10 +271,26 @@ async function createRecord() {
   if (!data.item) return alert("請輸入項目。");
   if (!data.amount || data.amount <= 0) return alert("請輸入金額。");
 
-  await api("/api/transactions", { method: "POST", body: JSON.stringify(data) });
+  const localId = tempId();
+  const optimisticRecord = { id: localId, ...data };
+  transactions = [optimisticRecord, ...transactions];
   closeModal();
-  await loadTransactions();
+  render();
   showCreateSuccess(data);
+
+  try {
+    const result = await api("/api/transactions", { method: "POST", body: JSON.stringify(data) });
+    if (result.id) {
+      transactions = transactions.map(item => item.id === localId ? { ...item, id: result.id } : item);
+      render();
+    }
+    setStatus(`新增成功：${data.item}｜${money(data.amount)}`, "success");
+  } catch (error) {
+    transactions = transactions.filter(item => item.id !== localId);
+    render();
+    setStatus(`新增失敗：${error.message}`, "error");
+    alert(`新增失敗：${error.message}`);
+  }
 }
 
 async function saveRecord(scope, id) {
@@ -284,14 +306,37 @@ async function saveRecord(scope, id) {
   if (!data.item) return alert("項目不可空白。");
   if (!data.amount || data.amount <= 0) return alert("金額需大於 0。");
 
-  await api("/api/transactions", { method: "PUT", body: JSON.stringify(data) });
+  const previous = transactions.find(item => item.id === id);
+  transactions = transactions.map(item => item.id === id ? { ...item, ...data } : item);
   editing = null;
-  await loadTransactions();
+  render();
+  setStatus(`儲存成功：${data.item}｜${money(data.amount)}`, "success");
+
+  try {
+    await api("/api/transactions", { method: "PUT", body: JSON.stringify(data) });
+  } catch (error) {
+    if (previous) transactions = transactions.map(item => item.id === id ? previous : item);
+    render();
+    setStatus(`儲存失敗：${error.message}`, "error");
+    alert(`儲存失敗：${error.message}`);
+  }
 }
 
 async function deleteRecord(id) {
-  await api(`/api/transactions?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-  await loadTransactions();
+  const previousRows = transactions;
+  const deleted = transactions.find(item => item.id === id);
+  transactions = transactions.filter(item => item.id !== id);
+  render();
+  setStatus(deleted ? `已刪除：${deleted.item}` : "已刪除。", "success");
+
+  try {
+    await api(`/api/transactions?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch (error) {
+    transactions = previousRows;
+    render();
+    setStatus(`刪除失敗：${error.message}`, "error");
+    alert(`刪除失敗：${error.message}`);
+  }
 }
 
 function bind() {
@@ -339,7 +384,7 @@ async function init() {
   setStatus("正式模式：前端透過 Vercel API 讀寫 Firestore。", "success");
 
   try {
-    await loadTransactions();
+    await loadTransactions({ quiet: true });
   } catch (error) {
     console.error(error);
     setStatus(`API 連線失敗：${error.message}`, "error");
